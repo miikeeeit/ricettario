@@ -1,6 +1,6 @@
 /* Service worker: tiene l'app disponibile anche senza internet.
    Cambia VERSIONE a ogni aggiornamento dei file, così il telefono scarica la nuova. */
-const VERSIONE = "ricettario-v2";
+const VERSIONE = "ricettario-v3";
 const FILE = ["./", "index.html", "store.js", "seed.json", "manifest.webmanifest",
   "icons/icon-192.png", "icons/icon-512.png", "icons/maskable-512.png", "icons/icon.svg"];
 

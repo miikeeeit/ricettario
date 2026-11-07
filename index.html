@@ -7,8 +7,7 @@
 <meta name="referrer" content="no-referrer">
 <title>Ricettario di Mike</title>
 <meta name="description" content="Il piano alimentare del trainer: ricette del giorno, spesa, cotto e crudo, progressi.">
-<meta name="theme-color" content="#ececea" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#111214" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#111214">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="icon" href="icons/icon-192.png" sizes="192x192">
@@ -621,6 +620,16 @@ li.taken .check{background:var(--ink);border-color:var(--ink)}
 #tabbar button{color:#9c9c97;min-height:62px}
 #tabbar button[aria-current="page"]{color:#111}
 #tabbar .tb-in > .ind{background:var(--acc);border-radius:26px;box-shadow:none}
+
+/* ---- niente scorrimento laterale e barra di sistema scura ---- */
+html,body{overflow-x:clip;overscroll-behavior-x:none}
+html{background:var(--bg)}
+.hero{overflow:clip}
+#view,.wrap{max-width:100%}
+@media (display-mode: standalone){
+  #tabbar{bottom:calc(max(env(safe-area-inset-bottom,0px),12px) + 8px)}
+  body{padding-bottom:calc(112px + env(safe-area-inset-bottom,0px))}
+}
 </style>
 
 <div class="wrap">
