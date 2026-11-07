@@ -814,7 +814,7 @@ const mlabel = m => m.min==="pre-workout" ? "Pre-workout" : m.t;
 const dayName = k => (DAYS.find(d=>d.k===k)||{d:""}).d;
 
 /* ---------- date ---------- */
-const INIZIO = "2026-10-27", REV_GIORNI = 14;
+let INIZIO = "2026-10-27";
 const MESI = ["gen","feb","mar","apr","mag","giu","lug","ago","set","ott","nov","dic"];
 const pad = n => String(n).padStart(2,"0");
 const isoOf = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
@@ -824,7 +824,8 @@ const diffDays = (a,b) => Math.round((dateOf(b)-dateOf(a))/864e5);
 const fmt = s => { const d=dateOf(s); return `${d.getDate()} ${MESI[d.getMonth()]}`; };
 const fmtLong = s => { const d=dateOf(s); return `${dayName(WD[d.getDay()])} ${d.getDate()} ${MESI[d.getMonth()]}`; };
 const todayISO = () => isoOf(new Date());
-const REVISIONE = addDays(INIZIO, REV_GIORNI);
+let REVISIONE = addDays(INIZIO, 14);
+const revGiorni = () => Math.max(1, diffDays(INIZIO, REVISIONE));
 const kgFmt = n => n.toFixed(1).replace(".",",");
 
 /* ---------- stato ---------- */
@@ -1279,7 +1280,7 @@ function weekly(){
 function chartSVG(){
   if(!pesate.length) return `<div class="empty-note">Il grafico compare dopo la prima pesata.</div>`;
   const W=640, H=240, L=46, R=62, T=18, B=34;
-  const xs = pesate.map(p=>diffDays(INIZIO,p.data)), x0 = Math.min(0,...xs), x1 = Math.max(REV_GIORNI,...xs);
+  const xs = pesate.map(p=>diffDays(INIZIO,p.data)), x0 = Math.min(0,...xs), x1 = Math.max(revGiorni(),...xs);
   const kgs = pesate.map(p=>p.kg);
   const y0 = Math.floor((Math.min(...kgs)-0.6)*2)/2, y1 = Math.ceil((Math.max(...kgs)+0.6)*2)/2;
   const sx = v => L + (v-x0)/(x1-x0||1)*(W-L-R), sy = v => T + (y1-v)/(y1-y0||1)*(H-T-B);
@@ -1288,7 +1289,7 @@ function chartSVG(){
   for(let v=y0; v<=y1+1e-9; v+=step){ const y=sy(v).toFixed(1); grid += `<line x1="${L}" x2="${W-R}" y1="${y}" y2="${y}" class="g"/><text x="${L-8}" y="${y}" class="ty" dy="4">${kgFmt(v)}</text>`; }
   let xt = "";
   for(let v=0; v<=x1; v+=7){ const x=sx(v).toFixed(1); xt += `<line x1="${x}" x2="${x}" y1="${T}" y2="${H-B}" class="g v"/><text x="${x}" y="${H-B+20}" class="tx">${fmt(addDays(INIZIO,v))}</text>`; }
-  xt += `<text x="${sx(REV_GIORNI).toFixed(1)}" y="${T-5}" class="tx rev">revisione</text>`;
+  xt += `<text x="${sx(revGiorni()).toFixed(1)}" y="${T-5}" class="tx rev">revisione</text>`;
   const wk = weekly();
   const line = wk.length>1 ? `<polyline class="avg" points="${wk.map(w=>`${sx(w.mid).toFixed(1)},${sy(w.avg).toFixed(1)}`).join(" ")}"/>` : "";
   const avgDots = wk.map(w=>`<circle class="avgdot" cx="${sx(w.mid).toFixed(1)}" cy="${sy(w.avg).toFixed(1)}" r="5"><title>Media settimana ${w.w+1}: ${kgFmt(w.avg)} kg (${w.n} pesate)</title></circle>`).join("");
@@ -1298,9 +1299,19 @@ function chartSVG(){
     <div class="legend"><span><i class="lg-pt"></i>Pesata</span><span><i class="lg-avg"></i>Media della settimana</span></div></div>`;
 }
 function headerHTML(){
-  const n = diffDays(INIZIO, todayISO());
-  const txt = n < 0 ? `Il piano parte ${fmtLong(INIZIO).toLowerCase()}.` : n < REV_GIORNI ? `Giorno ${n+1} di ${REV_GIORNI}. Revisione col trainer ${fmtLong(REVISIONE).toLowerCase()}, tra ${REV_GIORNI-n} ${REV_GIORNI-n===1?"giorno":"giorni"}.` : `I ${REV_GIORNI} giorni sono finiti: è il momento della revisione col trainer.`;
-  return `<div class="phead"><p>${txt}</p><div class="bar"><i style="width:${n<0?0:Math.min(100,(n+1)/REV_GIORNI*100)}%"></i></div></div>`;
+  const n = diffDays(INIZIO, todayISO()), tot = revGiorni(), left = diffDays(todayISO(), REVISIONE);
+  const txt = n < 0 ? `Il piano parte ${fmtLong(INIZIO).toLowerCase()}. Revisione col trainer ${fmtLong(REVISIONE).toLowerCase()}.`
+    : left > 0 ? `Giorno ${n+1} di ${tot}. Revisione col trainer ${fmtLong(REVISIONE).toLowerCase()}, tra ${left} ${left===1?"giorno":"giorni"}.`
+    : left === 0 ? `Oggi è il giorno della revisione col trainer: prepara il riepilogo qui sotto.`
+    : `La revisione era ${fmtLong(REVISIONE).toLowerCase()}. Imposta la prossima data qui sotto.`;
+  return `<div class="phead"><p>${txt}</p><div class="bar"><i style="width:${n<0?0:Math.min(100,(n+1)/tot*100)}%"></i></div></div>`;
+}
+function datesHTML(){
+  return `<div class="panel wide"><h3>Date del piano</h3>
+    <p class="hint">Cambiale quando il trainer ti dà un nuovo piano o fissa la prossima revisione.</p>
+    <form class="wform" id="dform"><label>Inizio piano<input type="date" id="d-inizio" value="${INIZIO}" required></label>
+      <label>Revisione col trainer<input type="date" id="d-rev" value="${REVISIONE}" required></label>
+      <button class="btn primary" type="submit">Salva date</button></form></div>`;
 }
 function weightHTML(){
   const wk = weekly(), first = pesate[0], last = pesate[pesate.length-1];
@@ -1342,9 +1353,9 @@ function buildSummary(){
   let piano=0, alt=0, salt=0; const altCount={};
   days.forEach(d=>Object.values(d.pasti||{}).forEach(v=>{ if(v.stato==="piano") piano++; else if(v.stato==="saltato") salt++; else if(v.stato==="alt"){ alt++; if(v.scelta) altCount[v.scelta]=(altCount[v.scelta]||0)+1; } }));
   const tot = piano+alt+salt, allen = days.filter(d=>d.allenamento).length;
-  const wk = weekly().filter(w=>w.w>=0 && w.w<2), ps = pesate.filter(p=>p.data>=INIZIO && p.data<=end);
+  const wk = weekly().filter(w=>w.w>=0 && w.w<=weekIdx(end)), ps = pesate.filter(p=>p.data>=INIZIO && p.data<=end);
   const L = [`Riepilogo piano alimentare, dal ${fmt(INIZIO)} al ${fmt(end)}`, "", "PESO"];
-  if(ps.length){ L.push(`- Prima pesata: ${kgFmt(ps[0].kg)} kg (${fmt(ps[0].data)})`, `- Ultima pesata: ${kgFmt(ps[ps.length-1].kg)} kg (${fmt(ps[ps.length-1].data)})`); wk.forEach(w=>L.push(`- Media settimana ${w.w+1}: ${kgFmt(w.avg)} kg (${w.n} pesate)`)); if(wk.length===2) L.push(`- Differenza tra le medie: ${(wk[1].avg-wk[0].avg>0?"+":"")+kgFmt(wk[1].avg-wk[0].avg)} kg`); }
+  if(ps.length){ L.push(`- Prima pesata: ${kgFmt(ps[0].kg)} kg (${fmt(ps[0].data)})`, `- Ultima pesata: ${kgFmt(ps[ps.length-1].kg)} kg (${fmt(ps[ps.length-1].data)})`); wk.forEach(w=>L.push(`- Media settimana ${w.w+1}: ${kgFmt(w.avg)} kg (${w.n} pesate)`)); if(wk.length>=2){ const d=wk[wk.length-1].avg-wk[0].avg; L.push(`- Differenza tra prima e ultima media: ${(d>0?"+":"")+kgFmt(d)} kg`); } }
   else L.push("- Nessuna pesata registrata");
   L.push("", "PASTI");
   if(tot){ L.push(`- Pasti registrati: ${tot} in ${days.length} giorni`, `- Come da piano: ${piano} (${Math.round(piano/tot*100)}%)`, `- Con un'alternativa: ${alt}`, `- Saltati: ${salt}`); const top = Object.entries(altCount).sort((a,b)=>b[1]-a[1]).slice(0,3); if(top.length) L.push(`- Alternative più scelte: ${top.map(([n,c])=>`${n} (${c})`).join(", ")}`); }
@@ -1360,7 +1371,7 @@ function summaryHTML(){
 function progressView(){
   const body = dbState==="loading" ? `<div class="panel wide"><p class="hint">Carico i tuoi progressi…</p></div>`
     : !db ? `<div class="panel wide"><h3>Non disponibile qui</h3><p class="hint">Il telefono non permette di salvare dati: controlla di non essere in navigazione privata.</p></div>`
-    : weightHTML() + diaryHTML() + summaryHTML() + backupHTML();
+    : weightHTML() + diaryHTML() + summaryHTML() + datesHTML() + backupHTML();
   return `<section class="view"><h2 class="sec">Progressi</h2>${headerHTML()}<div class="pgrid">${body}</div></section>`;
 }
 
@@ -1484,6 +1495,13 @@ document.addEventListener("submit", async e=>{
   const f = e.target; e.preventDefault();
   if(f.id==="sform"){ const v=document.getElementById("s-in").value; if(v.trim()) addChips(v); requestAnimationFrame(()=>{ const i=document.getElementById("s-in"); i&&i.focus(); }); return; }
   if(!db) return;
+  if(f.id==="dform"){
+    const a=document.getElementById("d-inizio").value, r=document.getElementById("d-rev").value;
+    if(!a || !r || r<=a){ toast("La revisione deve venire dopo l'inizio"); return; }
+    INIZIO=a; REVISIONE=r; summary=null; document.activeElement && document.activeElement.blur(); render();
+    try{ await db.doc("impostazioni/piano").set({inizio:a, revisione:r}); toast("Date salvate"); }catch(_){ toast("Non salvate, riprova"); }
+    return;
+  }
   if(f.id==="wform") return savePesata(document.getElementById("w-date").value, document.getElementById("w-kg").value);
   if(f.id==="qwform") return savePesata(todayISO(), document.getElementById("qw-kg").value);
   if(f.id==="saddf"){
@@ -1538,6 +1556,7 @@ render();
   dbState = db ? "ready" : "off";
   if(!db){ render(); return; }
   const lost = ()=>toast("Connessione persa: ricarica la pagina");
+  db.doc("impostazioni/piano").onSnapshot(s=>{ if(s.exists){ const d=s.data(); if(d.inizio) INIZIO=d.inizio; if(d.revisione) REVISIONE=d.revisione; } liveRender(); }, lost);
   db.doc("impostazioni/allenamento").onSnapshot(s=>{ if(s.exists){ const d=s.data(); TRAIN = new Set(WD.filter(k=>d[k])); } liveRender(); }, lost);
   db.collection("pesate").onSnapshot(s=>{ pesate = s.docs.map(d=>({id:d.id,...d.data()})).filter(p=>typeof p.kg==="number").sort((a,b)=>a.data<b.data?-1:1); liveRender(); }, lost);
   db.collection("diario").onSnapshot(s=>{ const o={}; s.docs.forEach(d=>o[d.id]={...d.data()}); diario=o; liveRender(); }, lost);
