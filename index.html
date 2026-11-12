@@ -630,6 +630,19 @@ html{background:var(--bg)}
   #tabbar{bottom:calc(max(env(safe-area-inset-bottom,0px),12px) + 8px)}
   body{padding-bottom:calc(112px + env(safe-area-inset-bottom,0px))}
 }
+
+/* ---- piatti cambiati ---- */
+.meal .st.sw{background:#fff;color:#111}
+.swnote{margin:0;font-size:14px;color:#111;opacity:.75}
+.meal .lg.back{background:#fff;color:#111}
+.meal .lg.pick{background:rgba(255,255,255,.45)}
+.usefor{display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--acc);color:#111;border-radius:18px;padding:12px 16px;margin-bottom:12px;font-size:15px}
+.usefor .linkbtn{color:#111;text-decoration:underline}
+.sres .chip.use{background:#111;color:#fff;border-color:#111}
+.sres .chip.use.on{background:#111;color:var(--acc)}
+.sres .sdays.when{padding-top:4px}
+.sresults{grid-template-columns:repeat(auto-fill,minmax(260px,1fr))}
+.it b.long{font-size:19px !important;letter-spacing:-.03em}
 </style>
 
 <div class="wrap">
@@ -888,16 +901,16 @@ const saveDiary = patch => saveDiaryFor(diaryDate, patch);
 function tileHTML([q,x]){
   const mm = /^([\d.,–-]+)\s*(g|ml|kg)?\*?$/i.exec(q||"");
   if(!mm) return null;
-  return `<div class="it"><b>${esc(mm[1])}${mm[2]?`<small>${esc(mm[2])}</small>`:""}</b><span>${esc(x)}</span></div>`;
+  return `<div class="it"><b class="${mm[1].length>4?"long":""}">${esc(mm[1])}${mm[2]?`<small>${esc(mm[2])}</small>`:""}</b><span>${esc(x)}</span></div>`;
 }
 function altHTML(a){return `<div class="alt"><b>${esc(a.n)}</b><span class="ai">${esc(a.i)}</span><p>${esc(a.p)}</p></div>`}
 function logRow(m, v){
-  const slot = SLOT[m.t];
+  const slot = SLOT[m.t], donePressed = m.swapped ? (v.stato==="alt" && v.scelta===m.n) : v.stato==="piano";
   if(m.free) return `<div class="logrow"><button class="lg done" data-log="${slot}" data-st="piano" aria-pressed="${v.stato==="piano"}">✓ Fatto</button></div>`;
-  const altOpen = v.stato==="alt";
+  const altOpen = v.stato==="alt" && !donePressed;
   return `<div class="logrow">
       <button class="lg cookb" data-cook="${mkey(m)}">▶ Cucina</button>
-      <button class="lg done" data-log="${slot}" data-st="piano" aria-pressed="${v.stato==="piano"}">✓ Fatto</button>
+      <button class="lg done" data-log="${slot}" data-st="piano" aria-pressed="${donePressed}">✓ Fatto</button>
       <button class="lg swap" data-log="${slot}" data-st="alt" aria-pressed="${altOpen}">⇄ Ho cambiato</button>
     </div>
     ${altOpen?`<div class="altpick">
@@ -905,9 +918,10 @@ function logRow(m, v){
       <input class="altfree" id="af-${slot}" data-altfree="${slot}" placeholder="Altro: scrivi cosa hai mangiato" value="${esc((m.alts||[]).some(a=>a.n===v.scelta)?"":(v.scelta||""))}">
     </div>`:""}`;
 }
-function mealHTML(m, isToday){
+function mealHTML(m, isToday, date){
   const k = mkey(m), v = isToday ? (((diario[todayISO()]||{}).pasti||{})[SLOT[m.t]]||{}) : {};
-  const state = v.stato==="piano" ? `<span class="st ok">✓ Fatto</span>` : v.stato==="alt" ? `<span class="st alt">⇄ Cambiato</span>` : "";
+  const done = m.swapped ? (v.stato==="alt" && v.scelta===m.n) : v.stato==="piano";
+  const state = done ? `<span class="st ok">✓ Fatto</span>` : v.stato==="alt" ? `<span class="st alt">⇄ Cambiato</span>` : m.swapped ? `<span class="st sw">Scelto da te</span>` : "";
   if(m.free) return `<article class="meal free m-${k}" id="m-${k}"><div class="mhead"><span class="mtag">${m.t}</span>${state}</div><h3>${esc(m.n)}</h3><p>${esc(m.txt)}</p>${isToday?logRow(m,v):""}</article>`;
   const tiles = m.ing.map(tileHTML).filter(Boolean).join("");
   const rest = m.ing.filter(i=>!tileHTML(i)).map(([,x])=>x);
@@ -919,7 +933,8 @@ function mealHTML(m, isToday){
     ${m.st?`<ol class="steps">${m.st.map(s=>`<li>${esc(s)}</li>`).join("")}</ol>`:""}
     ${m.note?`<p class="note">${esc(m.note)}</p>`:""}
     ${isToday?logRow(m,v):(m.st?`<div class="logrow"><button class="lg cookb" data-cook="${k}">▶ Cucina</button></div>`:"")}
-    <details><summary>Alternative (${m.alts.length})</summary><div class="alts">${m.alts.map(altHTML).join("")}</div></details>
+    ${m.swapped?`<p class="swnote">Al posto di: ${esc(m.orig)}</p>`:""}
+    <div class="logrow">${m.swapped?`<button class="lg back" data-unswap="${m.swapped}">↺ Torna al piano</button>`:""}<button class="lg pick" data-pickfor="${SLOT[m.t]}" data-date="${date}">⇄ Scegli un altro piatto</button></div>
   </article>`;
 }
 function dayPills(sel, attr){
@@ -933,25 +948,81 @@ function quickWeigh(){
     <button class="btn primary" type="submit">Salva</button></form>`;
 }
 function dayView(){
-  const d = DAYS.find(x=>x.k===dayK), t = isTrain(d.k), meals = mealsOf(d), isToday = d.k===TODAY_K;
+  const d = DAYS.find(x=>x.k===dayK), t = isTrain(d.k), date = dateForDay(dayK), meals = mealsFor(d, date), isToday = d.k===TODAY_K;
   const e = diario[todayISO()]||{}, done = isToday ? meals.filter(m=>((e.pasti||{})[SLOT[m.t]]||{}).stato).length : 0;
   return `<section class="view">
     ${dayPills(dayK,"day")}
     <div class="hero"><svg class="swoosh" viewBox="0 0 300 200" aria-hidden="true"><path d="M20 170 C 90 40, 170 40, 190 110 S 260 190, 290 30"/></svg><div>
-      <div class="eyebrow">${isToday?"Oggi":"Giorno"} <span class="badge ${t?"train":"rest"}">${t?'<span class="dot ink"></span>Allenamento stasera':"Riposo"}</span></div>
+      <div class="eyebrow">${isToday?"Oggi":fmt(date)} <span class="badge ${t?"train":"rest"}">${t?'<span class="dot ink"></span>Allenamento stasera':"Riposo"}</span></div>
       <h2>${d.d}</h2></div>
       <button class="switch" id="sw-${d.k}" role="switch" aria-checked="${t}" data-train="${d.k}"><span class="knob" aria-hidden="true"></span>Mi alleno ${isToday?"oggi":"questo giorno"}</button>
     </div>
     ${isToday && db?`<div class="dayprog"><span><b class="num">${done}</b> di ${meals.length} pasti segnati</span><div class="bar" data-bar="day-${dayK}"><i style="width:${done/meals.length*100}%"></i></div></div>`:""}
     ${isToday?quickWeigh():""}
-    <nav class="strip" aria-label="I pasti di ${d.d}">${meals.map(m=>{ const st=isToday?(((e.pasti||{})[SLOT[m.t]]||{}).stato):null; return `<a href="#m-${mkey(m)}" data-jump="m-${mkey(m)}" class="m-${mkey(m)} ${st?"is-done":""}"><span class="k">${mlabel(m)}${st?" ✓":""}</span><span class="n">${esc(m.n)}</span>${m.min&&m.min!=="pre-workout"?`<span class="t">${esc(m.min)}</span>`:""}</a>`; }).join("")}</nav>
+    <nav class="strip" aria-label="I pasti di ${d.d}">${meals.map(m=>{ const st=isToday?(((e.pasti||{})[SLOT[m.t]]||{}).stato):null; return `<a href="#m-${mkey(m)}" data-jump="m-${mkey(m)}" class="m-${mkey(m)} ${st?"is-done":""}"><span class="k">${mlabel(m)}${st?" ✓":""}${m.swapped?" · scelto da te":""}</span><span class="n">${esc(m.n)}</span>${m.min&&m.min!=="pre-workout"?`<span class="t">${esc(m.min)}</span>`:""}</a>`; }).join("")}</nav>
     ${t?`<p class="leadline">Lo spuntino è il pre-workout della scheda: mangialo 60–120 minuti prima di allenarti.</p>`:""}
-    <div class="meals">${meals.map(m=>mealHTML(m, isToday && !!db)).join("")}</div></section>`;
+    <div class="meals">${meals.map(m=>mealHTML(m, isToday && !!db, date)).join("")}</div></section>`;
+}
+
+
+/* ---------- piatti cambiati per un giorno preciso ---------- */
+let scambi = {}, loadedSc = false, loadedSg = false, cleaned = false;
+let pf = "tutti", pickIdx = null, useFor = null;
+const SLOT_OF = t => t==="Pre-workout" ? "spuntino" : SLOT[t];
+const SLOT_LABEL = {colazione:"Colazione", pranzo:"Pranzo", spuntino:"Spuntino", cena:"Cena"};
+function dateForDay(k){ const t=todayISO(); for(let i=0;i<7;i++){ const d=addDays(t,i); if(WD[dateOf(d).getDay()]===k) return d; } return t; }
+function next7(){ return Array.from({length:7},(_,i)=>{ const d=addDays(todayISO(),i), k=WD[dateOf(d).getDay()]; return {d, k, l: i===0?"Oggi":i===1?"Domani":`${dayName(k).slice(0,3)} ${dateOf(d).getDate()}`}; }); }
+function parseIng(s){
+  s = s.trim();
+  let m = /^(.*?)\s+(\d[\d.,–-]*\s*(?:g|ml|kg))$/i.exec(s); if(m) return [m[2].replace(/\s+/g," "), m[1]];
+  m = /^(\d+)\s+(.+)$/.exec(s); if(m) return [m[1], m[2]];
+  return ["", s];
+}
+function mealsFor(d, date){
+  return mealsOf(d).map(m=>{
+    if(m.free) return m;
+    const sw = scambi[`${date}_${SLOT[m.t]}`];
+    if(!sw) return m;
+    return {...m, n:sw.n, ing:sw.ing, st:(sw.st&&sw.st.length)?sw.st:null, note:null, swapped:`${date}_${SLOT[m.t]}`, orig:m.n,
+      min: m.min==="pre-workout" ? "pre-workout" : (sw.min || "a scelta")};
+  });
+}
+const CAT_RX = [[/whey|barretta|budino/i,"Integratori"],[/yogurt|latte|albume|uova|uovo|mozzarella|ricotta|gnocchi/i,"Frigo"],
+  [/pollo|manzo|tacchino|macinato|maiale|lonza|hamburger|merluzzo|orata|salmone|calamari|seppie|gamberi|bresaola|scottona|pesce/i,"Carne e pesce"],
+  [/pasta|riso|pane|piadina|avena|muesli|cereali|gallette|couscous|farro|bulgur|fette|polenta/i,"Pane, pasta e riso"],
+  [/mela|pera|frutti|zucchin|zucca|peperon|melanzan|pomodor|insalata|cipolla|limone|patate|rucola|funghi|prezzemolo|verdur|finocch/i,"Frutta e verdura"]];
+const guessCat = x => { for(const [r,c] of CAT_RX) if(r.test(x)) return c; return "Dispensa"; };
+const CAT_ORDER = {"Frutta e verdura":1,"Carne e pesce":2,"Frigo":3,"Pane, pasta e riso":4,"Dispensa":5,"Integratori":6};
+async function clearSwap(id){
+  delete scambi[id];
+  for(const it of dayItems.filter(i=>i.swap===id)){ try{ await db.collection("spesa_giorni").doc(it.id).delete(); }catch(_){} }
+  for(const it of dayItems.filter(i=>i.nascosto_da===id)){ try{ await db.collection("spesa_giorni").doc(it.id).update({nascosto_da:null}); }catch(_){} }
+  try{ await db.collection("scambi").doc(id).delete(); }catch(_){}
+}
+async function setSwap(r, date){
+  const slot = SLOT_OF(r.t), id = `${date}_${slot}`, k = WD[dateOf(date).getDay()], lbl = SLOT_LABEL[slot];
+  if(scambi[id]) await clearSwap(id);
+  const ing = r.ings.map(g=>[g.q, g.x]);
+  const doc = {data:date, slot, giorno:k, n:r.n, ing, st:r.st || (r.p?[r.p]:[]), min:r.min||""};
+  scambi[id] = doc; render();
+  await db.collection("scambi").doc(id).set(doc);
+  for(const it of dayItems.filter(i=>i.giorno===k && i.pasto===lbl && !i.swap && !i.nascosto_da)){ try{ await db.collection("spesa_giorni").doc(it.id).update({nascosto_da:id}); }catch(_){} }
+  let n = 0;
+  for(const [q,x] of ing){
+    if(!q && PANTRY.some(pp=>norm(x).includes(pp))) continue;
+    const c = guessCat(x);
+    await db.collection("spesa_giorni").doc(`${id}-${n++}`).set({giorno:k, name:x.charAt(0).toUpperCase()+x.slice(1), qty:q, cat:c, quando:"sempre", pasto:`${lbl} · cambiato`, have:false, taken:false, order:CAT_ORDER[c]*100+90+n, swap:id});
+  }
+}
+async function maybeCleanup(){
+  if(cleaned || !loadedSc || !loadedSg) return; cleaned = true;
+  const t = todayISO();
+  for(const id of Object.keys(scambi)) if(scambi[id].data < t) await clearSwap(id);
 }
 
 /* ---------- modalità cucina ---------- */
 let wakeLock = null, timer = null;
-function cookMeal(){ const d=DAYS.find(x=>x.k===dayK); return mealsOf(d).find(m=>mkey(m)===cook.k); }
+function cookMeal(){ const d=DAYS.find(x=>x.k===dayK); return mealsFor(d, dateForDay(dayK)).find(m=>mkey(m)===cook.k); }
 function stepMinutes(s){ const m = /(\d+)(?:\s*[–-]\s*(\d+))?\s*minut/i.exec(s); return m ? +(m[2]||m[1]) : 0; }
 function renderCook(){
   const box = document.getElementById("cook");
@@ -1019,7 +1090,7 @@ function weekView(){
   const cards = DAYS.map(d=>`<article class="wday ${d.k===TODAY_K?"istoday":""}">
     <div class="wtop"><button class="daylink" data-go="${d.k}">${d.d}${d.k===TODAY_K?' <span class="oggi">OGGI</span>':""}</button>
       <button class="switch sm" id="wsw-${d.k}" role="switch" aria-checked="${isTrain(d.k)}" aria-label="Allenamento ${d.d}" data-train="${d.k}"><span class="knob" aria-hidden="true"></span></button></div>
-    <ul class="wmeals">${mealsOf(d).map(m=>`<li class="m-${mkey(m)}"><div><span class="k">${mlabel(m)}</span><span class="n">${esc(m.n)}</span></div></li>`).join("")}</ul>
+    <ul class="wmeals">${mealsFor(d, dateForDay(d.k)).map(m=>`<li class="m-${mkey(m)}"><div><span class="k">${mlabel(m)}${m.swapped?" · scelto da te":""}</span><span class="n">${esc(m.n)}</span></div></li>`).join("")}</ul>
   </article>`).join("");
   return `<section class="view"><h2 class="sec">La settimana</h2>
     <p class="lead">Accendi l'interruttore sui giorni in cui vai in palestra: lo spuntino diventa il pre-workout e la spesa del giorno si aggiorna. Tocca un giorno per le ricette.</p>
@@ -1051,17 +1122,17 @@ function buildIndex(){
     if(m.slot || m.free) return;
     const key = m.n;
     if(seen[key]){ seen[key].days.push(d.k); return; }
-    const r = {kind:"main", n:m.n, t:m.t, mk:m.t.toLowerCase(), days:[d.k], ings:m.ing.map(([q,x])=>({q,x})), min:m.min};
+    const r = {kind:"main", n:m.n, t:m.t, mk:m.t.toLowerCase(), days:[d.k], ings:m.ing.map(([q,x])=>({q,x})), min:m.min, st:m.st};
     seen[key]=r; out.push(r);
-    m.alts.forEach(a=>{ if(seen["alt:"+a.n]) return; const ra={kind:"alt", n:a.n, t:m.t, mk:m.t.toLowerCase(), of:m.n, days:[d.k], ings:a.i.split(" · ").map(x=>({q:"",x})), p:a.p}; seen["alt:"+a.n]=ra; out.push(ra); });
+    m.alts.forEach(a=>{ if(seen["alt:"+a.n]) return; const ra={kind:"alt", n:a.n, t:m.t, mk:m.t.toLowerCase(), of:m.n, days:[d.k], ings:a.i.split(" · ").map(x=>{ const [q,n]=parseIng(x); return {q,x:n}; }), p:a.p}; seen["alt:"+a.n]=ra; out.push(ra); });
   }));
   Object.entries(PREM).forEach(([k,p])=>out.push({kind:"main", n:p.n, t:"Pre-workout", mk:"pre", days:Object.keys(PREPICK).filter(x=>PREPICK[x]===k), ings:p.ing.map(([q,x])=>({q,x})), pre:true}));
   Object.entries(REST).forEach(([k,r])=>{ if(seen["sp:"+r.n]) return; seen["sp:"+r.n]=1; out.push({kind:"main", n:r.n, t:"Spuntino", mk:"spuntino", days:[k], ings:r.ing.map(([q,x])=>({q,x})), rest:true}); });
-  [...Object.values(COL)].forEach(a=>{ if(seen["alt:"+a.n]) return; seen["alt:"+a.n]=1; out.push({kind:"alt", n:a.n, t:"Colazione", mk:"colazione", of:"qualsiasi colazione", days:[], ings:a.i.split(" · ").map(x=>({q:"",x})), p:a.p}); });
-  [...Object.values(SPU)].forEach(a=>{ if(seen["alt:"+a.n]) return; seen["alt:"+a.n]=1; out.push({kind:"alt", n:a.n, t:"Spuntino", mk:"spuntino", of:"qualsiasi spuntino", days:[], ings:a.i.split(" · ").map(x=>({q:"",x})), p:a.p}); });
+  [...Object.values(COL)].forEach(a=>{ if(seen["alt:"+a.n]) return; seen["alt:"+a.n]=1; out.push({kind:"alt", n:a.n, t:"Colazione", mk:"colazione", of:"qualsiasi colazione", days:[], ings:a.i.split(" · ").map(x=>{ const [q,n]=parseIng(x); return {q,x:n}; }), p:a.p}); });
+  [...Object.values(SPU)].forEach(a=>{ if(seen["alt:"+a.n]) return; seen["alt:"+a.n]=1; out.push({kind:"alt", n:a.n, t:"Spuntino", mk:"spuntino", of:"qualsiasi spuntino", days:[], ings:a.i.split(" · ").map(x=>{ const [q,n]=parseIng(x); return {q,x:n}; }), p:a.p}); });
   return out;
 }
-const INDEX = buildIndex();
+const INDEX = buildIndex(); INDEX.forEach((r,i)=>r.idx=i);
 function searchResults(){
   if(!searchChips.length) return [];
   const chips = searchChips.map(stem);
@@ -1076,22 +1147,34 @@ function searchResults(){
   }).filter(r=>r.have.length).sort((a,b)=> b.have.length-a.have.length || a.need.length-b.need.length || (a.kind==="main"?-1:1));
 }
 function ingText(g){ return (g.q?g.q+" ":"")+g.x; }
+function dishCard(r, withHave){
+  const slot = SLOT_OF(r.t);
+  return `<article class="sres m-${r.mk}">
+      <div class="mhead"><span class="mtag">${esc(r.t)}${r.kind==="alt"?" · alternativa":""}</span>${r.min&&r.min!=="pre-workout"?`<span class="mtime">${esc(r.min)}</span>`:""}</div>
+      <h3>${esc(r.n)}</h3>
+      ${withHave?`<p class="have">Hai: <b>${esc(r.have.map(g=>g.x).join(", "))}</b></p>
+      ${r.need.length?`<p class="need">Ti serve anche: ${esc(r.need.map(ingText).join(", "))}</p>`:`<p class="need ok">Hai tutto quello che serve.</p>`}`
+      :`<p class="need">${esc(r.ings.map(ingText).join(" · "))}</p>`}
+      ${r.kind==="alt"?`<p class="need">Al posto di: ${esc(r.of)}</p>`:""}
+      <div class="sdays">${useFor && useFor.slot===slot
+          ? `<button class="chip use on" data-usedate="${useFor.date}" data-idx="${r.idx}">Metti a ${SLOT_LABEL[slot].toLowerCase()} di ${esc(fmtLong(useFor.date).toLowerCase())} ›</button>`
+          : `<button class="chip use" data-use="${r.idx}" aria-expanded="${pickIdx===r.idx}">Metti in un giorno ›</button>`}</div>
+      ${pickIdx===r.idx && !(useFor && useFor.slot===slot)?`<div class="sdays when">${next7().map(x=>`<button class="chip" data-usedate="${x.d}" data-idx="${r.idx}">${x.l}</button>`).join("")}</div>`:""}
+    </article>`;
+}
 function searchView(){
   const res = searchResults();
-  const list = res.map(r=>`<article class="sres m-${r.mk}">
-      <div class="mhead"><span class="mtag">${esc(r.t)}${r.kind==="alt"?" · alternativa":""}</span>${r.min?`<span class="mtime">${esc(r.min)}</span>`:""}</div>
-      <h3>${esc(r.n)}</h3>
-      <p class="have">Hai: <b>${esc(r.have.map(g=>g.x).join(", "))}</b></p>
-      ${r.need.length?`<p class="need">Ti serve anche: ${esc(r.need.map(ingText).join(", "))}</p>`:`<p class="need ok">Hai tutto quello che serve.</p>`}
-      ${r.kind==="alt"?`<p class="need">Al posto di: ${esc(r.of)}${r.p?` · ${esc(r.p)}`:""}</p>`:""}
-      ${r.days.length?`<div class="sdays">${r.days.map(k=>`<button class="chip" data-go="${k}" data-jumpto="${r.kind==="main"?(r.pre?"pre":r.mk):r.mk}">${dayName(k)} ›</button>`).join("")}</div>`:""}
-    </article>`).join("");
-  return `<section class="view"><h2 class="sec">Cosa hai in casa?</h2>
-    <p class="lead">Scrivi gli ingredienti che hai e trovi i piatti del piano e le alternative che puoi fare, con quello che ti manca.</p>
-    <form class="sform" id="sform"><input id="s-in" placeholder="es. pollo, zucchine" autocomplete="off" aria-label="Ingrediente"><button class="btn primary" type="submit">Aggiungi</button></form>
-    ${searchChips.length?`<div class="chips">${searchChips.map((c,i)=>`<button class="chip on" data-unchip="${i}" aria-label="Togli ${esc(c)}">${esc(c)} ✕</button>`).join("")}<button class="linkbtn" data-clearchips>Svuota</button></div>`:""}
-    <div class="chips sugg"><span class="hint">Veloci:</span>${SUGG.filter(s=>!searchChips.includes(s)).map(s=>`<button class="chip" data-addchip="${s}">+ ${s}</button>`).join("")}</div>
-    ${searchChips.length ? (res.length?`<p class="hint">${res.length} ${res.length===1?"piatto":"piatti"}, prima quelli che usano più ingredienti tuoi.</p><div class="sresults">${list}</div>`:`<div class="empty-note">Nessun piatto del piano usa questi ingredienti. Prova con altri, o guarda gli scambi qui sotto.</div>`) : ""}
+  const inGroup = r => pf==="tutti" || (pf==="spuntino" ? (r.mk==="spuntino"||r.mk==="pre") : r.mk===pf);
+  const list = searchChips.length ? res.filter(inGroup) : INDEX.filter(inGroup);
+  const filters = [["tutti","Tutti"],["colazione","Colazione"],["pranzo","Pranzo"],["spuntino","Spuntino"],["cena","Cena"]];
+  return `<section class="view"><h2 class="sec">Piatti</h2>
+    <p class="lead">Scegli un piatto e mettilo nel giorno che vuoi: la scheda e la spesa di quel giorno si aggiornano. Il giorno dopo torna il piano del trainer.</p>
+    ${useFor?`<div class="usefor"><span>Stai scegliendo per <b>${SLOT_LABEL[useFor.slot].toLowerCase()} di ${esc(fmtLong(useFor.date).toLowerCase())}</b></span><button class="linkbtn" data-usecancel>Annulla</button></div>`:""}
+    <div class="chips">${filters.map(([k,l])=>`<button class="chip ${pf===k?"on":""}" data-pf="${k}">${l}</button>`).join("")}</div>
+    <form class="sform" id="sform"><input id="s-in" placeholder="Cerca per ingredienti: pollo, zucchine" autocomplete="off" aria-label="Ingrediente"><button class="btn primary" type="submit">Cerca</button></form>
+    ${searchChips.length?`<div class="chips">${searchChips.map((c,i)=>`<button class="chip on" data-unchip="${i}" aria-label="Togli ${esc(c)}">${esc(c)} ✕</button>`).join("")}<button class="linkbtn" data-clearchips>Svuota</button></div>`:`<div class="chips sugg"><span class="hint">Veloci:</span>${SUGG.map(x=>`<button class="chip" data-addchip="${x}">+ ${x}</button>`).join("")}</div>`}
+    ${list.length?`<p class="hint">${list.length} ${list.length===1?"piatto":"piatti"}${searchChips.length?", prima quelli che usano più ingredienti tuoi":""}.</p><div class="sresults">${list.map(r=>dishCard(r, !!searchChips.length)).join("")}</div>`
+      :`<div class="empty-note">Nessun piatto con questi ingredienti. Prova con altri, o guarda gli scambi qui sotto.</div>`}
     ${convHTML()}
     <details class="swaps"><summary>Scambi rapidi: cambiare un solo ingrediente</summary>
       <div class="tablebox"><table><thead><tr><th>Se non ti va</th><th>Metti al suo posto</th><th>Quantità</th></tr></thead><tbody>
@@ -1154,7 +1237,7 @@ function saveCv(){ try{ localStorage.setItem("ric-cv", JSON.stringify({id:cv.id,
 function planDoseToday(id){
   const a = ALIMENTI[id]; if(!a.match) return null;
   const d = DAYS.find(x=>x.k===TODAY_K);
-  for(const m of mealsOf(d)){ if(m.free||!m.ing) continue;
+  for(const m of mealsFor(d, todayISO())){ if(m.free||!m.ing) continue;
     const hit = m.ing.find(([q,x])=>q && a.match.test(x)); if(hit) return {q:hit[0], x:hit[1], pasto:mlabel(m)}; }
   return null;
 }
@@ -1194,7 +1277,7 @@ const sorted = l => [...l].sort((a,b)=>(a.order??999)-(b.order??999) || String(a
 function sItems(){
   if(sScope==="week") return weekItems;
   const t = isTrain(sDay);
-  return dayItems.filter(i=>i.giorno===sDay && (!i.quando || i.quando==="sempre" || i.quando===(t?"allenamento":"riposo")));
+  return dayItems.filter(i=>i.giorno===sDay && !i.nascosto_da && (!i.quando || i.quando==="sempre" || i.quando===(t?"allenamento":"riposo")));
 }
 const sAll = () => weekItems.concat(dayItems);
 const sBuy = () => sItems().filter(i=>!i.have);
@@ -1379,11 +1462,11 @@ function progressView(){
 /* =========================================================
    NAVIGAZIONE
    ========================================================= */
-const TABS = [["oggi","Oggi"],["settimana","Settimana"],["cerca","Cerca"],["spesa","Spesa"],["progressi","Progressi"]];
+const TABS = [["oggi","Oggi"],["settimana","Settimana"],["cerca","Piatti"],["spesa","Spesa"],["progressi","Progressi"]];
 const ICONS = {
   oggi:'<path d="M12 3v2M12 19v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M3 12h2M19 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/><circle cx="12" cy="12" r="4"/>',
   settimana:'<rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
-  cerca:'<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>',
+  cerca:'<path d="M3.5 12h17a8.5 8 0 0 1-17 0Z"/><path d="M9 8.5c-.8-1 .8-1.8 0-3.5M12.5 8.5c-.8-1 .8-1.8 0-3.5M16 8.5c-.8-1 .8-1.8 0-3.5"/>',
   spesa:'<path d="M3 4h2.5l2.2 10.5h10.6L20.5 7H7"/><circle cx="9.5" cy="19" r="1.4"/><circle cx="17" cy="19" r="1.4"/>',
   progressi:'<path d="M4 19V5M4 19h16M8 15l3.5-4 3 2.5L20 7"/>'
 };
@@ -1447,12 +1530,30 @@ view.addEventListener("click", async e=>{
   // segna dal piatto (oggi)
   if(b=q("[data-log]")){
     const slot=b.dataset.log, st=b.dataset.st, cur=((diario[todayISO()]||{}).pasti||{})[slot]||{};
-    const v = cur.stato===st ? {} : (st==="alt" ? {stato:"alt", scelta:cur.scelta||""} : {stato:st});
+    const sw = scambi[`${todayISO()}_${slot}`];
+    let v;
+    if(st==="piano" && sw) v = (cur.stato==="alt" && cur.scelta===sw.n) ? {} : {stato:"alt", scelta:sw.n};
+    else v = cur.stato===st ? {} : (st==="alt" ? {stato:"alt", scelta:cur.scelta||""} : {stato:st});
     if(v.stato) flash = `#m-${b.closest(".meal").id.slice(2)} [data-log="${slot}"][data-st="${st}"]`;
     await saveDiaryFor(todayISO(), {pasti:{[slot]:v}}); return;
   }
   // cerca
   if(b=q("[data-cvstato]")){ cv.stato=b.dataset.cvstato; saveCv(); render(); return; }
+  if(b=q("[data-pf]")){ pf=b.dataset.pf; pickIdx=null; render(); return; }
+  if(b=q("[data-use]")){ const i=+b.dataset.use; pickIdx = pickIdx===i?null:i; render(); return; }
+  if(q("[data-usecancel]")){ useFor=null; render(); return; }
+  if(b=q("[data-pickfor]")){ useFor={slot:b.dataset.pickfor, date:b.dataset.date}; pf=useFor.slot; pickIdx=null; searchChips=[]; go("cerca"); return; }
+  if(b=q("[data-usedate]")){
+    if(!db){ toast("Non posso salvare su questo telefono"); return; }
+    const r=INDEX[+b.dataset.idx], date=b.dataset.usedate, k=WD[dateOf(date).getDay()], slot=SLOT_OF(r.t);
+    useFor=null; pickIdx=null;
+    await setSwap(r, date);
+    const meal = mealsFor(DAYS.find(x=>x.k===k), date).find(m=>SLOT[m.t]===slot);
+    go("oggi",{day:k, jump: meal ? "m-"+mkey(meal) : null});
+    toast(`${r.n}: messo a ${SLOT_LABEL[slot].toLowerCase()}, ${fmtLong(date).toLowerCase()}`);
+    return;
+  }
+  if(b=q("[data-unswap]")){ await clearSwap(b.dataset.unswap); render(); toast("Tornato il piatto del piano"); return; }
   if(b=q("[data-addchip]")){ addChips(b.dataset.addchip); return; }
   if(b=q("[data-unchip]")){ searchChips.splice(+b.dataset.unchip,1); saveUI(); render(); return; }
   if(q("[data-clearchips]")){ searchChips=[]; saveUI(); render(); return; }
@@ -1562,7 +1663,8 @@ render();
   db.collection("pesate").onSnapshot(s=>{ pesate = s.docs.map(d=>({id:d.id,...d.data()})).filter(p=>typeof p.kg==="number").sort((a,b)=>a.data<b.data?-1:1); liveRender(); }, lost);
   db.collection("diario").onSnapshot(s=>{ const o={}; s.docs.forEach(d=>o[d.id]={...d.data()}); diario=o; liveRender(); }, lost);
   db.collection("spesa").onSnapshot(s=>{ weekItems = s.docs.map(d=>({id:d.id,_col:"spesa",...d.data()})); liveRender(); }, lost);
-  db.collection("spesa_giorni").onSnapshot(s=>{ dayItems = s.docs.map(d=>({id:d.id,_col:"spesa_giorni",...d.data()})); liveRender(); }, lost);
+  db.collection("spesa_giorni").onSnapshot(s=>{ dayItems = s.docs.map(d=>({id:d.id,_col:"spesa_giorni",...d.data()})); loadedSg=true; maybeCleanup(); liveRender(); }, lost);
+  db.collection("scambi").onSnapshot(s=>{ const o={}; s.docs.forEach(d=>o[d.id]={...d.data()}); scambi=o; loadedSc=true; maybeCleanup(); liveRender(); }, lost);
   render();
 })();
 
