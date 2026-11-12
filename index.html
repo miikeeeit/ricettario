@@ -643,6 +643,48 @@ html{background:var(--bg)}
 .sres .sdays.when{padding-top:4px}
 .sresults{grid-template-columns:repeat(auto-fill,minmax(260px,1fr))}
 .it b.long{font-size:19px !important;letter-spacing:-.03em}
+
+/* ---- Piatti: lista per pasto + scheda dal basso ---- */
+.seg.four{display:grid;grid-template-columns:repeat(4,1fr);gap:2px;background:var(--s1);border-radius:999px;padding:4px;margin-bottom:12px}
+.seg.four button{border:0;background:transparent;color:var(--muted);border-radius:999px;padding:10px 4px;font:700 14px var(--f-body);cursor:pointer}
+.seg.four > .ind{background:var(--ink);border-radius:999px}
+.seg.four button[aria-pressed="true"]{color:var(--bg)}
+.qchips{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px;margin-bottom:10px}
+.qchips::-webkit-scrollbar{display:none}
+.qchips .chip{flex:none}
+.dlist{list-style:none;margin:6px 0 0;padding:0;background:var(--s1);border-radius:24px;overflow:hidden}
+.dlist li + li{border-top:1px solid var(--line)}
+.drow{width:100%;display:grid;grid-template-columns:12px minmax(0,1fr) auto 14px;align-items:center;gap:12px;padding:14px 16px;background:none;border:0;text-align:left;color:var(--ink);cursor:pointer;font:inherit}
+.drow:hover{background:var(--s2)}
+.ddot{width:12px;height:12px;border-radius:50%;background:var(--m);box-shadow:inset 0 0 0 1.5px rgba(0,0,0,.2)}
+.dtxt{display:grid;gap:2px;min-width:0}
+.dn{font:700 17px/1.2 var(--f-display);letter-spacing:-.02em}
+.ds{font-size:13px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dk{font:700 10.5px var(--f-body);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);border:1.5px solid var(--s3);border-radius:999px;padding:3px 7px;white-space:nowrap}
+.dk.new{border-color:var(--acc);background:var(--acc);color:#111}
+.dk.main{border-color:var(--ink);color:var(--ink)}
+.dgo{color:var(--dim);font-size:20px}
+.dl-note{margin-top:10px}
+.sheet{position:fixed;inset:0;z-index:45;background:rgba(0,0,0,.45);display:flex;align-items:flex-end;justify-content:center}
+.sh-in{width:100%;max-width:640px;max-height:88vh;overflow:auto;background:var(--m);color:#111;border-radius:30px 30px 0 0;
+  padding:18px 20px calc(24px + env(safe-area-inset-bottom,0px));display:grid;gap:12px;box-sizing:border-box}
+.sh-top{display:flex;justify-content:space-between;align-items:center}
+.sh-top .mtag{color:#111}.sh-top .mtag::before{background:#111}
+.sh-top .btn{background:rgba(255,255,255,.7);color:#111}
+.sh-in h3{font:800 32px/.95 var(--f-display);letter-spacing:-.045em;margin:0}
+.sh-min{margin:0;font-weight:600;opacity:.7}
+.sh-in .it{background:rgba(255,255,255,.62);border-radius:16px}
+.sh-in .it b,.sh-in .qb,.sh-in .qb b,.sh-in ol.steps li{color:#111}
+.sh-in .it span{color:#2b2b2b}
+.sh-in .it b small{color:#111;opacity:.55}
+.sh-in ol.steps li::before{background:rgba(0,0,0,.1);color:#111}
+.sh-in .swnote{color:#111}
+.sh-k{margin:4px 0 0;font:700 12px var(--f-body);letter-spacing:.1em;text-transform:uppercase}
+.sh-days{display:flex;flex-wrap:wrap;gap:6px}
+.sh-days .chip{background:rgba(255,255,255,.7);border-color:#111;color:#111}
+.sh-days .btn.primary{background:#111;color:var(--acc);width:100%;min-height:52px}
+body.sheeted{overflow:hidden}
+@media (prefers-reduced-motion:no-preference){.sheet:not([hidden]) .sh-in{animation:shUp .32s cubic-bezier(.22,1,.36,1)}@keyframes shUp{from{transform:translateY(40px);opacity:.4}to{transform:none;opacity:1}}}
 </style>
 
 <div class="wrap">
@@ -654,6 +696,7 @@ html{background:var(--bg)}
   <footer>Grammature dal piano del trainer: pasta, riso, patate, carne e pesce pesati a crudo. I cambi sono approssimativi, come dice la scheda. Il pallino lime segna i giorni di allenamento.</footer>
 </div>
 <nav id="tabbar" aria-label="Sezioni"></nav>
+<div id="sheet" class="sheet" hidden></div>
 <div id="cook" class="cook" hidden role="dialog" aria-modal="true" aria-label="Modalità cucina"></div>
 <div class="toast" id="toast" hidden></div>
 <span id="days" hidden></span>
@@ -1020,6 +1063,34 @@ async function maybeCleanup(){
   for(const id of Object.keys(scambi)) if(scambi[id].data < t) await clearSwap(id);
 }
 
+
+/* ---------- scheda del piatto (si apre dal basso) ---------- */
+function sheetHTML(){
+  const r = INDEX[sheetIdx], slot = SLOT_OF(r.t);
+  const tiles = r.ings.map(g=>tileHTML([g.q,g.x])).filter(Boolean).join("");
+  const rest = r.ings.filter(g=>!tileHTML([g.q,g.x])).map(g=>g.x);
+  const steps = r.st && r.st.length ? r.st : (r.p ? [r.p] : []);
+  return `<div class="sh-in m-${r.mk}" role="dialog" aria-modal="true" aria-label="${esc(r.n)}">
+    <div class="sh-top"><span class="mtag">${esc(r.t)} · ${kindLabel(r)}</span><button class="btn" data-shclose aria-label="Chiudi">✕</button></div>
+    <h3>${esc(r.n)}</h3>
+    ${r.min&&r.min!=="pre-workout"?`<p class="sh-min">${esc(r.min)}</p>`:""}
+    <div class="tiles-i">${tiles}</div>
+    ${rest.length?`<p class="qb"><b>Anche:</b> ${esc(rest.join(", "))}</p>`:""}
+    ${steps.length?`<ol class="steps">${steps.map(x=>`<li>${esc(x)}</li>`).join("")}</ol>`:""}
+    ${r.kind==="alt"?`<p class="swnote">Al posto di: ${esc(r.of)}</p>`:""}
+    ${r.days&&r.days.length&&r.kind==="main"?`<p class="swnote">Nel piano: ${r.days.map(dayName).join(", ").toLowerCase()}</p>`:""}
+    <p class="sh-k">${useFor&&useFor.slot===slot?"Conferma":"Mettilo a "+SLOT_LABEL[slot].toLowerCase()+" di…"}</p>
+    <div class="sh-days">${useFor&&useFor.slot===slot
+      ? `<button class="btn primary" data-usedate="${useFor.date}" data-idx="${r.idx}">Metti a ${SLOT_LABEL[slot].toLowerCase()} di ${esc(fmtLong(useFor.date).toLowerCase())}</button>`
+      : next7().map(x=>`<button class="chip" data-usedate="${x.d}" data-idx="${r.idx}">${x.l}</button>`).join("")}</div>
+  </div>`;
+}
+function renderSheet(){
+  const el = document.getElementById("sheet");
+  if(sheetIdx===null){ el.hidden=true; el.innerHTML=""; document.body.classList.remove("sheeted"); return; }
+  el.innerHTML = sheetHTML(); el.hidden=false; document.body.classList.add("sheeted");
+}
+
 /* ---------- modalità cucina ---------- */
 let wakeLock = null, timer = null;
 function cookMeal(){ const d=DAYS.find(x=>x.k===dayK); return mealsFor(d, dateForDay(dayK)).find(m=>mkey(m)===cook.k); }
@@ -1116,6 +1187,38 @@ function weekView(){
 const PANTRY = ["olio","sale","pepe","aglio","origano","paprika","rosmarino","salvia","cannella","prezzemolo","sesamo","capperi","limone","spezie","acqua"];
 const SUGG = ["pollo","uova","riso","pasta","patate","zucchine","salmone","manzo","yogurt","pane","gallette","merluzzo","melanzane","peperoni","mozzarella"];
 const stem = w => { w = norm(w).trim(); return w.length>4 ? w.replace(/(i|e|a|o)$/,"") : w; };
+
+/* ---------- piatti nuovi (fuori dalla settimana del trainer, dosi dalle sue tabelle di scambio) ---------- */
+const EXTRA = [
+ {t:"Pranzo", n:"Polenta con spezzatino e funghi", min:"40 min",
+  ing:[["130 g","farina di mais per polenta"],["150 g","manzo magro a cubetti"],["200 g","funghi champignon"],["100 g","passata di pomodoro"],["15 g","olio EVO"],["","rosmarino, aglio"]],
+  st:["Manzo a cubetti rosolato in padella senza olio, 5 minuti.","Aggiungi funghi a fette, aglio e rosmarino, poi la passata: coperchio, fuoco basso, 25 minuti.","Polenta: farina a pioggia in acqua salata bollente, mescolando (istantanea 5–8 minuti, tradizionale 40).","Polenta nel piatto, sopra lo spezzatino, olio a crudo."]},
+ {t:"Pranzo", n:"Polenta con pollo e peperoni", min:"25 min",
+  ing:[["130 g","farina di mais per polenta"],["150 g","petto di pollo"],["2","peperoni"],["15 g","olio EVO"],["","origano"]],
+  st:["Peperoni a listarelle in padella coperta con un goccio d'acqua, 10 minuti.","Aggiungi il pollo a straccetti, 6–7 minuti a fuoco vivo, origano.","Polenta istantanea in acqua salata bollente, 5–8 minuti mescolando.","Polenta nel piatto, sopra pollo e peperoni, olio a crudo."]},
+ {t:"Pranzo", n:"Polenta e merluzzo in umido", min:"25 min",
+  ing:[["130 g","farina di mais per polenta"],["200 g","merluzzo o nasello"],["150 g","passata di pomodoro"],["15 g","olio EVO"],["","prezzemolo, aglio"]],
+  st:["Passata con aglio in padella, 5 minuti.","Merluzzo a pezzi nel sugo, coperchio, 8 minuti.","Polenta istantanea in acqua salata bollente, 5–8 minuti mescolando.","Polenta nel piatto, sopra il merluzzo col sugo, prezzemolo e olio a crudo."]},
+ {t:"Pranzo", n:"Pasta pollo e funghi", min:"20 min",
+  ing:[["100 g","pasta secca"],["150 g","petto di pollo"],["200 g","funghi champignon"],["15 g","olio EVO"],["","aglio, prezzemolo"]],
+  st:["Acqua a bollire.","Funghi a fette in padella con aglio e metà olio, 8 minuti finché asciugano.","Pollo a cubetti, 6–7 minuti a fuoco vivo.","Salta con la pasta, prezzemolo e resto dell'olio."]},
+ {t:"Pranzo", n:"Riso gamberi e peperoni", min:"20 min",
+  ing:[["100 g","riso"],["180–200 g","gamberi (anche surgelati)"],["2","peperoni"],["15 g","olio EVO"],["","prezzemolo"]],
+  st:["Riso in acqua salata, 15 minuti.","Peperoni a listarelle in padella coperta, 10 minuti.","Gamberi con i peperoni, 3 minuti.","Unisci al riso, prezzemolo e olio a crudo."]},
+ {t:"Cena", n:"Peperoni ripieni di manzo", min:"45 min",
+  ing:[["150 g","macinato magro di manzo"],["2","peperoni"],["70 g","pane (a parte o grattugiato nel ripieno)"],["10 g","olio EVO"],["","prezzemolo, origano"]],
+  st:["Forno a 200 °C. Peperoni a metà, senza semi.","Macinato con prezzemolo, origano, sale e un po' del pane sbriciolato.","Riempi i peperoni, olio sopra, forno 35 minuti.","Il resto del pane a parte."]},
+ {t:"Cena", n:"Pollo ai funghi e patate", min:"25 min",
+  ing:[["150 g","petto di pollo"],["200 g","funghi champignon"],["300 g","patate"],["10 g","olio EVO"],["","aglio, prezzemolo"]],
+  st:["Patate a cubetti lesse 15 minuti.","Funghi a fette in padella con aglio, 8 minuti.","Pollo a fettine con i funghi, 4 minuti per lato.","Patate a parte, prezzemolo e olio a crudo."]},
+ {t:"Cena", n:"Tagliata con funghi trifolati e pane", min:"20 min",
+  ing:[["150–160 g","manzo magro (anche scottona)"],["200 g","funghi champignon"],["70 g","pane"],["10 g","olio EVO"],["","aglio, prezzemolo"]],
+  st:["Funghi a fette in padella con aglio, 8 minuti, poi prezzemolo.","Padella rovente senza olio, manzo 2–3 minuti per lato, riposo 3 minuti.","A fette sui funghi, olio a crudo, pane a parte."]},
+ {t:"Cena", n:"Peperonata con uova e pane", min:"25 min",
+  ing:[["3","uova intere"],["2","peperoni"],["70 g","pane"],["8 g","olio EVO"],["","cipolla"]],
+  st:["Peperoni e cipolla a listarelle in padella coperta con un goccio d'acqua, 15 minuti.","Fai 3 spazi, rompi le uova, coperchio, 5 minuti.","Olio a crudo, pane a parte. Olio al minimo per i grassi delle uova."]},
+];
+
 function buildIndex(){
   const out = [], seen = {};
   DAYS.forEach(d=>d.meals.forEach(m=>{
@@ -1126,6 +1229,7 @@ function buildIndex(){
     seen[key]=r; out.push(r);
     m.alts.forEach(a=>{ if(seen["alt:"+a.n]) return; const ra={kind:"alt", n:a.n, t:m.t, mk:m.t.toLowerCase(), of:m.n, days:[d.k], ings:a.i.split(" · ").map(x=>{ const [q,n]=parseIng(x); return {q,x:n}; }), p:a.p}; seen["alt:"+a.n]=ra; out.push(ra); });
   }));
+  EXTRA.forEach(e=>out.push({kind:"new", n:e.n, t:e.t, mk:e.t.toLowerCase(), days:[], ings:e.ing.map(([q,x])=>({q,x})), min:e.min, st:e.st}));
   Object.entries(PREM).forEach(([k,p])=>out.push({kind:"main", n:p.n, t:"Pre-workout", mk:"pre", days:Object.keys(PREPICK).filter(x=>PREPICK[x]===k), ings:p.ing.map(([q,x])=>({q,x})), pre:true}));
   Object.entries(REST).forEach(([k,r])=>{ if(seen["sp:"+r.n]) return; seen["sp:"+r.n]=1; out.push({kind:"main", n:r.n, t:"Spuntino", mk:"spuntino", days:[k], ings:r.ing.map(([q,x])=>({q,x})), rest:true}); });
   [...Object.values(COL)].forEach(a=>{ if(seen["alt:"+a.n]) return; seen["alt:"+a.n]=1; out.push({kind:"alt", n:a.n, t:"Colazione", mk:"colazione", of:"qualsiasi colazione", days:[], ings:a.i.split(" · ").map(x=>{ const [q,n]=parseIng(x); return {q,x:n}; }), p:a.p}); });
@@ -1133,9 +1237,10 @@ function buildIndex(){
   return out;
 }
 const INDEX = buildIndex(); INDEX.forEach((r,i)=>r.idx=i);
+const SYN = {pesce:["merluzzo","orata","salmone","calamari","seppie","gamberi","nasello","pesce"], manzo:["manzo","scottona","hamburger","macinato","tagliata","bistecca"]};
 function searchResults(){
   if(!searchChips.length) return [];
-  const chips = searchChips.map(stem);
+  const chips = searchChips.flatMap(c=>SYN[norm(c)]||[c]).map(stem);
   return INDEX.map(r=>{
     const have = [], need = [];
     r.ings.forEach(g=>{
@@ -1147,34 +1252,35 @@ function searchResults(){
   }).filter(r=>r.have.length).sort((a,b)=> b.have.length-a.have.length || a.need.length-b.need.length || (a.kind==="main"?-1:1));
 }
 function ingText(g){ return (g.q?g.q+" ":"")+g.x; }
-function dishCard(r, withHave){
-  const slot = SLOT_OF(r.t);
-  return `<article class="sres m-${r.mk}">
-      <div class="mhead"><span class="mtag">${esc(r.t)}${r.kind==="alt"?" · alternativa":""}</span>${r.min&&r.min!=="pre-workout"?`<span class="mtime">${esc(r.min)}</span>`:""}</div>
-      <h3>${esc(r.n)}</h3>
-      ${withHave?`<p class="have">Hai: <b>${esc(r.have.map(g=>g.x).join(", "))}</b></p>
-      ${r.need.length?`<p class="need">Ti serve anche: ${esc(r.need.map(ingText).join(", "))}</p>`:`<p class="need ok">Hai tutto quello che serve.</p>`}`
-      :`<p class="need">${esc(r.ings.map(ingText).join(" · "))}</p>`}
-      ${r.kind==="alt"?`<p class="need">Al posto di: ${esc(r.of)}</p>`:""}
-      <div class="sdays">${useFor && useFor.slot===slot
-          ? `<button class="chip use on" data-usedate="${useFor.date}" data-idx="${r.idx}">Metti a ${SLOT_LABEL[slot].toLowerCase()} di ${esc(fmtLong(useFor.date).toLowerCase())} ›</button>`
-          : `<button class="chip use" data-use="${r.idx}" aria-expanded="${pickIdx===r.idx}">Metti in un giorno ›</button>`}</div>
-      ${pickIdx===r.idx && !(useFor && useFor.slot===slot)?`<div class="sdays when">${next7().map(x=>`<button class="chip" data-usedate="${x.d}" data-idx="${r.idx}">${x.l}</button>`).join("")}</div>`:""}
-    </article>`;
+let sheetIdx = null;
+const ingShort = r => r.ings.filter(g=>g.q).slice(0,3).map(ingText).join(" · ") || r.ings.slice(0,3).map(g=>g.x).join(", ");
+const kindLabel = r => r.kind==="main" ? "del piano" : r.kind==="new" ? "nuovo" : "alternativa";
+function defaultPf(){ const h=new Date().getHours(); return h<10?"colazione":h<15?"pranzo":h<18?"spuntino":"cena"; }
+function dishRow(r, search){
+  return `<li><button class="drow m-${r.mk}" data-sheet="${r.idx}">
+      <span class="ddot" aria-hidden="true"></span>
+      <span class="dtxt"><span class="dn">${esc(r.n)}</span>
+        <span class="ds">${search ? (r.need.length?`Ti manca: ${esc(r.need.map(g=>g.x).join(", "))}`:"Hai tutto") : esc(ingShort(r))}</span></span>
+      <span class="dk ${r.kind}">${kindLabel(r)}</span><span class="dgo" aria-hidden="true">›</span></button></li>`;
 }
 function searchView(){
+  if(!["colazione","pranzo","spuntino","cena"].includes(pf)) pf = defaultPf();
   const res = searchResults();
-  const inGroup = r => pf==="tutti" || (pf==="spuntino" ? (r.mk==="spuntino"||r.mk==="pre") : r.mk===pf);
-  const list = searchChips.length ? res.filter(inGroup) : INDEX.filter(inGroup);
-  const filters = [["tutti","Tutti"],["colazione","Colazione"],["pranzo","Pranzo"],["spuntino","Spuntino"],["cena","Cena"]];
+  const inGroup = r => pf==="spuntino" ? (r.mk==="spuntino"||r.mk==="pre") : r.mk===pf;
+  const list = (searchChips.length ? res : INDEX).filter(inGroup);
+  const order = {main:0,new:1,alt:2};
+  if(!searchChips.length) list.sort((a,b)=>order[a.kind]-order[b.kind] || a.n.localeCompare(b.n));
+  const filters = [["colazione","Colazione"],["pranzo","Pranzo"],["spuntino","Spuntino"],["cena","Cena"]];
+  const quick = ["pollo","manzo","pesce","uova","polenta","funghi","peperoni","patate","pasta","riso"];
   return `<section class="view"><h2 class="sec">Piatti</h2>
-    <p class="lead">Scegli un piatto e mettilo nel giorno che vuoi: la scheda e la spesa di quel giorno si aggiornano. Il giorno dopo torna il piano del trainer.</p>
     ${useFor?`<div class="usefor"><span>Stai scegliendo per <b>${SLOT_LABEL[useFor.slot].toLowerCase()} di ${esc(fmtLong(useFor.date).toLowerCase())}</b></span><button class="linkbtn" data-usecancel>Annulla</button></div>`:""}
-    <div class="chips">${filters.map(([k,l])=>`<button class="chip ${pf===k?"on":""}" data-pf="${k}">${l}</button>`).join("")}</div>
-    <form class="sform" id="sform"><input id="s-in" placeholder="Cerca per ingredienti: pollo, zucchine" autocomplete="off" aria-label="Ingrediente"><button class="btn primary" type="submit">Cerca</button></form>
-    ${searchChips.length?`<div class="chips">${searchChips.map((c,i)=>`<button class="chip on" data-unchip="${i}" aria-label="Togli ${esc(c)}">${esc(c)} ✕</button>`).join("")}<button class="linkbtn" data-clearchips>Svuota</button></div>`:`<div class="chips sugg"><span class="hint">Veloci:</span>${SUGG.map(x=>`<button class="chip" data-addchip="${x}">+ ${x}</button>`).join("")}</div>`}
-    ${list.length?`<p class="hint">${list.length} ${list.length===1?"piatto":"piatti"}${searchChips.length?", prima quelli che usano più ingredienti tuoi":""}.</p><div class="sresults">${list.map(r=>dishCard(r, !!searchChips.length)).join("")}</div>`
-      :`<div class="empty-note">Nessun piatto con questi ingredienti. Prova con altri, o guarda gli scambi qui sotto.</div>`}
+    <div class="seg four slider" data-slide="seg-pf"><i class="ind" aria-hidden="true"></i>${filters.map(([k,l])=>`<button data-pf="${k}" aria-pressed="${pf===k}">${l}</button>`).join("")}</div>
+    <div class="qchips">${quick.map(x=>`<button class="chip ${searchChips.includes(x)?"on":""}" data-qchip="${x}">${x}</button>`).join("")}</div>
+    <form class="sform" id="sform"><input id="s-in" placeholder="Cosa hai in casa? es. zucchine, ricotta" autocomplete="off" aria-label="Ingrediente"><button class="btn primary" type="submit">Cerca</button></form>
+    ${searchChips.length?`<div class="chips">${searchChips.map((c,i)=>`<button class="chip on" data-unchip="${i}" aria-label="Togli ${esc(c)}">${esc(c)} ✕</button>`).join("")}<button class="linkbtn" data-clearchips>Svuota</button></div>`:""}
+    ${list.length?`<ul class="dlist">${list.map(r=>dishRow(r, !!searchChips.length)).join("")}</ul>`
+      :`<div class="empty-note">Nessun piatto ${searchChips.length?"con questi ingredienti ":""}per ${filters.find(f=>f[0]===pf)[1].toLowerCase()}. ${searchChips.length?"Prova un altro pasto o togli un ingrediente.":""}</div>`}
+    <p class="hint dl-note">«Del piano» sono i piatti del trainer, «nuovo» e «alternativa» usano le dosi delle sue tabelle di scambio.</p>
     ${convHTML()}
     <details class="swaps"><summary>Scambi rapidi: cambiare un solo ingrediente</summary>
       <div class="tablebox"><table><thead><tr><th>Se non ti va</th><th>Metti al suo posto</th><th>Quantità</th></tr></thead><tbody>
@@ -1477,6 +1583,7 @@ function render(){
   renderTabbar();
   view.innerHTML = tab==="oggi" ? dayView() : tab==="settimana" ? weekView() : tab==="cerca" ? searchView() : tab==="spesa" ? spesaView() : progressView();
   if(cook) renderCook();
+  renderSheet();
   animate();
 }
 
@@ -1514,9 +1621,23 @@ function animate(){
 }
 window.addEventListener("resize", ()=>{ for(const k in slidePos) delete slidePos[k]; animate(); });
 document.fonts && document.fonts.ready.then(()=>{ for(const k in slidePos) delete slidePos[k]; animate(); });
-function go(t, opts={}){ tab=t; if(opts.day) dayK=opts.day; sEditing=null; sPanel=null; render(); if(opts.jump){ requestAnimationFrame(()=>{ const el=document.getElementById(opts.jump); el && el.scrollIntoView({block:"start"}); }); } else window.scrollTo({top:0}); }
+function go(t, opts={}){ tab=t; sheetIdx=null; if(opts.day) dayK=opts.day; sEditing=null; sPanel=null; render(); if(opts.jump){ requestAnimationFrame(()=>{ const el=document.getElementById(opts.jump); el && el.scrollIntoView({block:"start"}); }); } else window.scrollTo({top:0}); }
 tabbar.addEventListener("click", e=>{ const b=e.target.closest("[data-tab]"); if(!b) return; if(b.dataset.tab==="oggi") dayK=TODAY_K; go(b.dataset.tab); });
 
+async function sheetClick(e){
+  const t=e.target;
+  if(t===document.getElementById("sheet") || t.closest("[data-shclose]")){ sheetIdx=null; renderSheet(); return; }
+  const b=t.closest("[data-usedate]"); if(!b) return;
+  if(!db){ toast("Non posso salvare su questo telefono"); return; }
+  const r=INDEX[+b.dataset.idx], date=b.dataset.usedate, k=WD[dateOf(date).getDay()], slot=SLOT_OF(r.t);
+  useFor=null; sheetIdx=null; renderSheet();
+  await setSwap(r, date);
+  const meal = mealsFor(DAYS.find(x=>x.k===k), date).find(m=>SLOT[m.t]===slot);
+  go("oggi",{day:k, jump: meal ? "m-"+mkey(meal) : null});
+  toast(`${r.n}: messo a ${SLOT_LABEL[slot].toLowerCase()}, ${fmtLong(date).toLowerCase()}`);
+}
+document.getElementById("sheet").addEventListener("click", sheetClick);
+document.addEventListener("keydown", e=>{ if(sheetIdx!==null && e.key==="Escape"){ sheetIdx=null; renderSheet(); } });
 view.addEventListener("click", async e=>{
   const t = e.target;
   const q = s => t.closest(s);
@@ -1540,7 +1661,8 @@ view.addEventListener("click", async e=>{
   // cerca
   if(b=q("[data-cvstato]")){ cv.stato=b.dataset.cvstato; saveCv(); render(); return; }
   if(b=q("[data-pf]")){ pf=b.dataset.pf; pickIdx=null; render(); return; }
-  if(b=q("[data-use]")){ const i=+b.dataset.use; pickIdx = pickIdx===i?null:i; render(); return; }
+  if(b=q("[data-sheet]")){ sheetIdx=+b.dataset.sheet; renderSheet(); return; }
+  if(b=q("[data-qchip]")){ const x=b.dataset.qchip, i=searchChips.indexOf(x); if(i>=0) searchChips.splice(i,1); else searchChips.push(x); saveUI(); render(); return; }
   if(q("[data-usecancel]")){ useFor=null; render(); return; }
   if(b=q("[data-pickfor]")){ useFor={slot:b.dataset.pickfor, date:b.dataset.date}; pf=useFor.slot; pickIdx=null; searchChips=[]; go("cerca"); return; }
   if(b=q("[data-usedate]")){
